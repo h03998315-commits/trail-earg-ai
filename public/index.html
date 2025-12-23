@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Earg AI</title>
+  <link rel="stylesheet" href="/css/jarvis.css" />
+</head>
+<body>
+
+<div id="sidebar">
+  <header>🧠 Earg AI</header>
+  <button onclick="newChat()" style="margin:10px">+ New Chat</button>
+  <div id="chats"></div>
+</div>
+
+<div id="main">
+  <div id="messages"></div>
+  <div id="inputBox">
+    <textarea id="input"></textarea>
+    <button onclick="send()">Send</button>
+  </div>
+</div>
+
+<script src="/js/chat.js"></script>
+<script src="/js/stream.js"></script>
+</body>
+</html>
