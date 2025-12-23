@@ -2,7 +2,7 @@ const router = require("express").Router();
 
 let groqClient = null;
 
-// 🧠 In-memory session memory (server instance)
+// 🧠 In-memory session memory (per server instance)
 const chatMemory = [];
 const MAX_MEMORY = 6;
 
@@ -17,23 +17,46 @@ async function getGroq() {
   return groqClient;
 }
 
-// Decide when internet is actually needed
-function needsInternet(query) {
-  const casualPatterns = [
-    /^hi$/i,
-    /^hello$/i,
-    /^hey$/i,
-    /^how are you/i,
-    /^who are you/i,
-    /^what can you do/i,
-    /^thanks/i,
-    /^thank you/i,
-    /^what did we last talk about/i
-  ];
-  return !casualPatterns.some(p => p.test(query.trim()));
+/*
+🧠 REASON-FIRST / INTERNET-LAST LOGIC
+
+Rules:
+- Default = NO internet
+- Internet ONLY when question is explicitly time-sensitive
+- NEVER for identity, memory, names, personal statements
+*/
+
+// ❌ Never search for personal / memory statements
+function isBlockedFromInternet(text) {
+  return /my name is|i am |i'm |call me|remember|what did we|who am i/i.test(
+    text.toLowerCase()
+  );
 }
 
-// 🌐 Tavily search (top 3 only)
+// ✅ Only allow internet for explicit real-time intent
+function needsInternet(query) {
+  const q = query.toLowerCase();
+
+  if (isBlockedFromInternet(q)) return false;
+
+  const realtimeTriggers = [
+    "today",
+    "latest",
+    "current",
+    "right now",
+    "news",
+    "price",
+    "weather",
+    "stock",
+    "election",
+    "score",
+    "live"
+  ];
+
+  return realtimeTriggers.some(word => q.includes(word));
+}
+
+// 🌐 Tavily search (strict, small)
 async function webSearch(query) {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -61,13 +84,14 @@ router.post("/chat", async (req, res) => {
     let context = "";
     let usedInternet = false;
 
+    // 🌐 Internet ONLY if explicitly required
     if (needsInternet(message)) {
       const results = await webSearch(message);
       if (results.length) {
         usedInternet = true;
-        context = results.map((r, i) =>
-          `Source ${i + 1}: ${r.content}`
-        ).join("\n\n");
+        context = results
+          .map((r, i) => `Source ${i + 1}: ${r.content}`)
+          .join("\n\n");
       }
     }
 
@@ -75,14 +99,19 @@ router.post("/chat", async (req, res) => {
       {
         role: "system",
         content: `
-You are EARG AI, an assistant created by the EARG AI project.
+You are EARG AI, created by the EARG AI project.
 You are NOT Meta AI, OpenAI, Google, or any other company.
-If asked about your creator, say: "I was created by the EARG AI team."
-You have short-term memory only for this conversation session.
-If you remember something, say "from this session".
-Think internally before answering.
-If live data is provided, you may use it. Otherwise rely on reasoning.
-Respond clearly, naturally, and confidently.
+
+CRITICAL RULES:
+- Always attempt to answer using your own reasoning first.
+- Use live internet information ONLY if it is explicitly provided.
+- Never infer personal details about the user.
+- If a user shares their name, acknowledge politely and stop.
+- You have short-term memory ONLY for this session.
+- If recalling something, say "from this session".
+
+If no live data is provided, do NOT invent external facts.
+Respond clearly, safely, and confidently.
         `.trim()
       }
     ];
@@ -94,6 +123,7 @@ Respond clearly, naturally, and confidently.
       });
     }
 
+    // 🧠 Inject session memory
     messages.push(...chatMemory);
 
     messages.push({
@@ -108,11 +138,13 @@ Respond clearly, naturally, and confidently.
 
     const reply = completion.choices[0].message.content;
 
-    // 🧠 Save session memory
+    // 🧠 Save memory (session only)
     chatMemory.push({ role: "user", content: message });
     chatMemory.push({ role: "assistant", content: reply });
 
-    while (chatMemory.length > MAX_MEMORY) chatMemory.shift();
+    while (chatMemory.length > MAX_MEMORY) {
+      chatMemory.shift();
+    }
 
     res.json({ reply, usedInternet });
   } catch (err) {
@@ -121,6 +153,7 @@ Respond clearly, naturally, and confidently.
   }
 });
 
+// Health check
 router.get("/status", (_, res) => {
   res.json({ ok: true });
 });
