@@ -149,7 +149,6 @@
       animation: pulse 1.2s infinite;
     }
 
-    /* 🌐 LIVE DATA BADGE */
     .live-badge {
       font-size: 11px;
       color: var(--accent);
@@ -243,6 +242,14 @@
   const chat = document.getElementById("chat");
   const input = document.getElementById("input");
 
+  // ===== SESSION ID (NEW) =====
+  let sessionId = localStorage.getItem("earg_session");
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    localStorage.setItem("earg_session", sessionId);
+  }
+  // ============================
+
   function time() {
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
@@ -289,7 +296,10 @@
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text })
+        body: JSON.stringify({
+          message: text,
+          sessionId   // NEW
+        })
       });
 
       const data = await res.json();
