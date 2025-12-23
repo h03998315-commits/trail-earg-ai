@@ -5,6 +5,7 @@ async function loadChats() {
   const chats = await res.json();
   const el = document.getElementById("chats");
   el.innerHTML = "";
+
   chats.forEach(c => {
     const d = document.createElement("div");
     d.className = "chat-item";
@@ -12,6 +13,11 @@ async function loadChats() {
     d.onclick = () => selectChat(c.id);
     el.appendChild(d);
   });
+
+  // Auto-select first chat
+  if (chats.length > 0 && !currentChat) {
+    selectChat(chats[0].id);
+  }
 }
 
 async function newChat() {
@@ -27,4 +33,14 @@ function selectChat(id) {
   document.getElementById("messages").innerHTML = "";
 }
 
-loadChats();
+document.addEventListener("DOMContentLoaded", () => {
+  loadChats();
+
+  document.getElementById("sendBtn").onclick = send;
+  document.getElementById("input").addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  });
+});
