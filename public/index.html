@@ -1,3 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Earg AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/css/jarvis.css" />
+</head>
+<body>
+
+<!-- DEBUG BANNER (REMOVE LATER) -->
 <div style="background:red;color:white;padding:10px;text-align:center">
   🚨 NEW VERSION LOADED 🚨
 </div>
+
+<div id="sidebar">
+  <header>🧠 Earg AI</header>
+  <button onclick="newChat()" style="margin:10px">+ New Chat</button>
+  <div id="chats"></div>
+</div>
+
+<div id="main">
+  <div id="messages"></div>
+  <div id="inputBox">
+    <textarea id="input" placeholder="Message Earg AI..."></textarea>
+    <button id="sendBtn">Send</button>
+  </div>
+</div>
+
+<!-- IMPORTANT: load JS in correct order -->
+<script src="/js/chat.js"></script>
+<script src="/js/stream.js"></script>
+
+</body>
+</html>
