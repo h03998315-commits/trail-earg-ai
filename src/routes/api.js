@@ -1,12 +1,12 @@
 const router = require("express").Router();
 
-let groqClient = null;
+let groqClient;
 
-// 🧠 In-memory chat history (per server instance)
+// ===== MEMORY =====
 const chatMemory = [];
-const MAX_MEMORY = 6;
+const MAX_MEMORY = 10;
 
-// Load Groq safely (Node 22 compatible)
+// ===== LOAD GROQ =====
 async function getGroq() {
   if (!groqClient) {
     const { default: Groq } = await import("groq-sdk");
@@ -17,52 +17,26 @@ async function getGroq() {
   return groqClient;
 }
 
-// ✅ Improved: Decide when internet is ACTUALLY needed
-function needsInternet(query) {
-  const q = query.toLowerCase();
-
-  // Never search for casual or reasoning-only queries
-  const noInternetPatterns = [
-    /^hi$/,
-    /^hello$/,
-    /^hey$/,
-    /^how are you/,
-    /^who are you/,
-    /^what can you do/,
-    /^thank/,
-    /^why /,
-    /^how does /,
-    /^explain /,
-    /^what is /,
-    /^define /
+// ===== UNCERTAINTY DETECTION =====
+function lacksConfidence(text) {
+  const signals = [
+    "i don't know",
+    "i am not sure",
+    "i'm not sure",
+    "i don’t have information",
+    "i do not have information",
+    "unclear",
+    "not enough information",
+    "cannot confirm",
+    "might be",
+    "possibly",
+    "hard to say"
   ];
-
-  if (noInternetPatterns.some(p => p.test(q.trim()))) {
-    return false;
-  }
-
-  // Explicit internet intent
-  const internetTriggers = [
-    "search",
-    "find",
-    "online",
-    "website",
-    "app",
-    "review",
-    "price",
-    "available",
-    "latest",
-    "download",
-    "ios",
-    "android",
-    "company",
-    "startup"
-  ];
-
-  return internetTriggers.some(word => q.includes(word));
+  const lower = text.toLowerCase();
+  return signals.some(s => lower.includes(s));
 }
 
-// 🌐 Tavily web search (top 3)
+// ===== WEB SEARCH =====
 async function webSearch(query) {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -72,7 +46,7 @@ async function webSearch(query) {
     },
     body: JSON.stringify({
       query,
-      max_results: 3,
+      max_results: 4,
       search_depth: "basic"
     })
   });
@@ -81,81 +55,99 @@ async function webSearch(query) {
   return data.results || [];
 }
 
-// Main chat route
+// ===== CHAT ROUTE =====
 router.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
     const groq = await getGroq();
 
-    let context = "";
+    // ===== PASS 1: THINK FROM TRAINING =====
+    const baseMessages = [
+      {
+        role: "system",
+        content: `
+You are EARG AI.
+
+IDENTITY:
+- Created by the EARG AI team.
+- Not Meta AI, OpenAI, Google, or any provider.
+- Never mention training data or model origin.
+
+BEHAVIOR:
+- Answer using your own reasoning first.
+- If unsure, clearly express uncertainty.
+- Do NOT invent facts.
+- Do NOT mention searching or browsing.
+- Think like an expert.
+`
+      },
+      ...chatMemory,
+      { role: "user", content: message }
+    ];
+
+    const firstCompletion = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      temperature: 0.6,
+      messages: baseMessages
+    });
+
+    let firstReply = firstCompletion.choices[0].message.content;
+    let finalReply = firstReply;
     let usedInternet = false;
 
-    // 🌐 Use internet ONLY when clearly needed
-    if (needsInternet(message)) {
+    // ===== PASS 2: GO ONLINE IF NEEDED =====
+    if (lacksConfidence(firstReply)) {
       const results = await webSearch(message);
 
       if (results.length > 0) {
         usedInternet = true;
-        context = results.map((r, i) =>
-          `Source ${i + 1}: ${r.content}`
-        ).join("\n\n");
-      }
-    }
 
-    const messages = [
-      {
-        role: "system",
-        content: `
-You are EARG AI, an assistant created by the EARG AI project.
+        const context = results
+          .map((r, i) => `Source ${i + 1}: ${r.content}`)
+          .join("\n\n");
 
-Identity rules:
-- You are NOT Meta AI, OpenAI, Google, or any other company.
-- If asked about your creator, say: "I was created by the EARG AI team."
+        const secondMessages = [
+          {
+            role: "system",
+            content: `
+You are EARG AI.
 
-Reasoning rules:
-- Think internally first.
-- Use the internet ONLY if live information is provided.
-- If live data is provided, summarize it confidently.
-- Do NOT apologize for limitations.
-- Do NOT explain how searching works.
-- Do NOT say "I might be wrong because I searched".
-
-Conversation:
-- Remember recent messages.
-- Respond clearly, directly, and naturally.
+TASK:
+- Combine your own reasoning with the live information below.
+- Correct any uncertainty from earlier.
+- Produce ONE confident, clear answer.
+- Do NOT mention sources or searching.
 `
-      }
-    ];
+          },
+          {
+            role: "system",
+            content: `Live information:\n${context}`
+          },
+          { role: "user", content: message }
+        ];
 
-    if (context) {
-      messages.push({
-        role: "system",
-        content: `Live internet information:\n${context}`
-      });
+        const secondCompletion = await groq.chat.completions.create({
+          model: "llama-3.1-8b-instant",
+          temperature: 0.6,
+          messages: secondMessages
+        });
+
+        finalReply = secondCompletion.choices[0].message.content;
+      }
     }
 
-    messages.push(...chatMemory);
-
-    messages.push({
-      role: "user",
-      content: message
-    });
-
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
-      messages
-    });
-
-    const reply = completion.choices[0].message.content;
-
+    // ===== SAVE MEMORY =====
     chatMemory.push({ role: "user", content: message });
-    chatMemory.push({ role: "assistant", content: reply });
+    chatMemory.push({ role: "assistant", content: finalReply });
 
     while (chatMemory.length > MAX_MEMORY) {
       chatMemory.shift();
     }
 
-    res.json({ reply, usedInternet });
+    res.json({
+      reply: finalReply,
+      usedInternet
+    });
 
   } catch (err) {
     console.error("Chat error:", err);
@@ -163,7 +155,7 @@ Conversation:
   }
 });
 
-// Health check
+// ===== STATUS =====
 router.get("/status", (_, res) => {
   res.json({ ok: true });
 });
