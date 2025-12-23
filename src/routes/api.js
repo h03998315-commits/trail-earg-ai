@@ -17,32 +17,33 @@ async function getGroq() {
   return groqClient;
 }
 
-// Casual messages → no internet
-function isCasual(query) {
-  const casualPatterns = [
-    /^hi$/i,
-    /^hello$/i,
-    /^hey$/i,
-    /^how are you/i,
-    /^who are you/i,
-    /^what can you do/i,
-    /^thanks/i,
-    /^thank you/i
-  ];
-  return casualPatterns.some(p => p.test(query.trim()));
+/* =========================
+   🔢 MATH DETECTION + SOLVER
+   ========================= */
+
+// Detect pure math expressions
+function isMathQuery(text) {
+  return /^[0-9+\-*/().%\s]+$/.test(text.trim());
 }
 
-// 🧮 Pure arithmetic detector
-function isPureMath(input) {
-  return /^[\d\s+\-*/().]+$/.test(input.trim());
+// Safe math evaluation
+function solveMath(expression) {
+  try {
+    const cleaned = expression.replace(/%/g, "/100");
+    const result = Function(`"use strict"; return (${cleaned})`)();
+    if (typeof result === "number" && isFinite(result)) {
+      return result;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
-// 🌐 Decide if internet is REALLY needed
-function needsInternet(query) {
-  return /\b(current|latest|today|now|news|price|update|live|recent|who is the current)\b/i.test(query);
-}
+/* =========================
+   🌐 INTERNET SEARCH (NON-MATH)
+   ========================= */
 
-// 🌐 Web search (Tavily)
 async function webSearch(query) {
   try {
     const res = await fetch("https://api.tavily.com/search", {
@@ -57,7 +58,6 @@ async function webSearch(query) {
         search_depth: "basic"
       })
     });
-
     const data = await res.json();
     return data.results || [];
   } catch {
@@ -65,66 +65,51 @@ async function webSearch(query) {
   }
 }
 
-// Main chat route
+/* =========================
+   💬 MAIN CHAT ROUTE
+   ========================= */
+
 router.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
 
-    /* =========================
-       🧮 ARITHMETIC SHORT-CIRCUIT
-       ========================= */
-    if (isPureMath(message)) {
-      try {
-        const result = Function(`"use strict"; return (${message})`)();
+    /* ---------- 1️⃣ PURE MATH → NO AI, NO INTERNET ---------- */
+    if (isMathQuery(message)) {
+      const answer = solveMath(message);
+      if (answer !== null) {
         return res.json({
-          reply: String(result),
-          usedInternet: false
-        });
-      } catch {
-        return res.json({
-          reply: "I couldn’t compute that expression. Please check the format.",
+          reply: `The correct result is **${answer}**.`,
           usedInternet: false
         });
       }
     }
 
+    /* ---------- 2️⃣ NON-MATH → AI + OPTIONAL INTERNET ---------- */
     const groq = await getGroq();
-
     let context = "";
     let usedInternet = false;
 
-    /* =========================
-       🌐 INTERNET (ONLY IF NEEDED)
-       ========================= */
-    if (!isCasual(message) && needsInternet(message)) {
-      const results = await webSearch(message);
-      if (results.length) {
-        usedInternet = true;
-        context = results
-          .map((r, i) => `Source ${i + 1}: ${r.content}`)
-          .join("\n\n");
-      }
+    const results = await webSearch(message);
+    if (results.length) {
+      usedInternet = true;
+      context = results.map((r, i) => `Source ${i + 1}: ${r.content}`).join("\n\n");
     }
 
-    /* =========================
-       🧠 SYSTEM PROMPT
-       ========================= */
     const messages = [
       {
         role: "system",
         content: `
 You are EARG AI, created by the EARG AI team.
-You are NOT Meta AI, OpenAI, Google, or any other company.
+You are not Meta AI, OpenAI, Google, or any other company.
 
 Rules:
-- Think internally before answering.
-- Use your own reasoning and knowledge FIRST.
-- Internet data is secondary and optional.
-- If internet info exists, blend it naturally.
-- Never mention searching, APIs, or sources.
-- Never invent personal details.
-- If uncertain, say so honestly.
-- Be accurate, calm, and confident.
+- Think and reason before answering.
+- Use your own knowledge first.
+- Internet info is supplemental only.
+- Blend reasoning + live info naturally.
+- Never mention sources, APIs, or searches.
+- Never invent personal data.
+- Be calm, accurate, and confident.
 `
       }
     ];
@@ -136,14 +121,8 @@ Rules:
       });
     }
 
-    // 🧠 Memory
     messages.push(...chatMemory);
-
-    // User message
-    messages.push({
-      role: "user",
-      content: message
-    });
+    messages.push({ role: "user", content: message });
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
@@ -156,10 +135,7 @@ Rules:
     // Save memory
     chatMemory.push({ role: "user", content: message });
     chatMemory.push({ role: "assistant", content: reply });
-
-    while (chatMemory.length > MAX_MEMORY) {
-      chatMemory.shift();
-    }
+    while (chatMemory.length > MAX_MEMORY) chatMemory.shift();
 
     res.json({ reply, usedInternet });
 
@@ -169,7 +145,10 @@ Rules:
   }
 });
 
-// Health check
+/* =========================
+   ❤️ HEALTH CHECK
+   ========================= */
+
 router.get("/status", (_, res) => {
   res.json({ ok: true });
 });
