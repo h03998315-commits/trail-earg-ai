@@ -8,7 +8,7 @@
   <style>
     :root {
       --bg: #020617;
-      --panel: rgba(15, 23, 42, 0.9);
+      --panel: rgba(15,23,42,.92);
       --border: #1e293b;
       --accent: #38bdf8;
       --user: #2563eb;
@@ -27,6 +27,49 @@
       overflow: hidden;
     }
 
+    /* ===== BOOT SCREEN ===== */
+    #boot {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      animation: fadeOut 1s ease forwards;
+      animation-delay: 3.6s;
+    }
+
+    .boot-box {
+      text-align: center;
+      color: var(--accent);
+      font-weight: 600;
+      letter-spacing: .6px;
+    }
+
+    .boot-line {
+      opacity: 0;
+      animation: show 0.4s ease forwards;
+    }
+
+    .boot-line:nth-child(1) { animation-delay: .2s; }
+    .boot-line:nth-child(2) { animation-delay: .8s; }
+    .boot-line:nth-child(3) { animation-delay: 1.4s; }
+    .boot-line:nth-child(4) { animation-delay: 2s; }
+    .boot-line:nth-child(5) { animation-delay: 2.6s; }
+
+    @keyframes show {
+      to { opacity: 1; }
+    }
+
+    @keyframes fadeOut {
+      to {
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
+
+    /* ===== HEADER ===== */
     header {
       position: fixed;
       top: 0;
@@ -35,13 +78,18 @@
       height: 56px;
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 8px;
+      justify-content: space-between;
+      padding: 0 14px;
       background: rgba(2,6,23,.95);
       border-bottom: 1px solid var(--border);
       z-index: 10;
       font-weight: 600;
-      letter-spacing: .5px;
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .dot {
@@ -52,6 +100,13 @@
       box-shadow: 0 0 12px var(--accent);
     }
 
+    .clear {
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    /* ===== CHAT ===== */
     #chat {
       position: absolute;
       top: 56px;
@@ -62,7 +117,7 @@
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 16px;
     }
 
     .bubble {
@@ -70,7 +125,7 @@
       padding: 14px 16px;
       border-radius: 16px;
       line-height: 1.55;
-      animation: slideIn .25s ease;
+      animation: slide .25s ease;
       white-space: pre-wrap;
       word-wrap: break-word;
     }
@@ -86,13 +141,20 @@
       border: 1px solid var(--border);
     }
 
+    .time {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+      text-align: right;
+    }
+
     .typing {
       font-size: 14px;
       color: var(--muted);
-      padding-left: 6px;
-      animation: pulse 1.3s infinite;
+      animation: pulse 1.2s infinite;
     }
 
+    /* ===== INPUT ===== */
     footer {
       position: fixed;
       bottom: 0;
@@ -129,7 +191,7 @@
       box-shadow: 0 0 14px rgba(56,189,248,.5);
     }
 
-    @keyframes slideIn {
+    @keyframes slide {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; }
     }
@@ -140,7 +202,7 @@
       100% { opacity: .4 }
     }
 
-    @media (max-width: 600px) {
+    @media (max-width:600px) {
       .bubble { max-width: 92%; }
     }
   </style>
@@ -148,9 +210,23 @@
 
 <body>
 
+<!-- BOOT -->
+<div id="boot">
+  <div class="boot-box">
+    <div class="boot-line">EARG AI</div>
+    <div class="boot-line">Initializing core systems…</div>
+    <div class="boot-line">Loading reasoning modules…</div>
+    <div class="boot-line">Synchronizing interface…</div>
+    <div class="boot-line">System ready</div>
+  </div>
+</div>
+
 <header>
-  <div class="dot"></div>
-  EARG AI
+  <div class="title">
+    <div class="dot"></div>
+    EARG AI — JARVIS
+  </div>
+  <div class="clear" onclick="clearChat()">Clear</div>
 </header>
 
 <div id="chat"></div>
@@ -164,11 +240,23 @@
   const chat = document.getElementById("chat");
   const input = document.getElementById("input");
 
+  function time() {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
   function add(role, text) {
-    const div = document.createElement("div");
-    div.className = "bubble " + role;
-    div.textContent = text;
-    chat.appendChild(div);
+    const wrap = document.createElement("div");
+    const msg = document.createElement("div");
+    msg.className = "bubble " + role;
+    msg.textContent = text;
+
+    const t = document.createElement("div");
+    t.className = "time";
+    t.textContent = time();
+
+    wrap.appendChild(msg);
+    wrap.appendChild(t);
+    chat.appendChild(wrap);
     chat.scrollTop = chat.scrollHeight;
   }
 
@@ -194,6 +282,10 @@
     const data = await res.json();
     typing.remove();
     add("ai", data.reply);
+  }
+
+  function clearChat() {
+    chat.innerHTML = "";
   }
 
   input.addEventListener("keydown", e => {
