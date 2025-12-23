@@ -2,7 +2,7 @@ const router = require("express").Router();
 
 let groqClient = null;
 
-// 🧠 In-memory session memory (per server instance)
+// 🧠 In-memory chat history (per server instance)
 const chatMemory = [];
 const MAX_MEMORY = 6;
 
@@ -17,46 +17,52 @@ async function getGroq() {
   return groqClient;
 }
 
-/*
-🧠 REASON-FIRST / INTERNET-LAST LOGIC
-
-Rules:
-- Default = NO internet
-- Internet ONLY when question is explicitly time-sensitive
-- NEVER for identity, memory, names, personal statements
-*/
-
-// ❌ Never search for personal / memory statements
-function isBlockedFromInternet(text) {
-  return /my name is|i am |i'm |call me|remember|what did we|who am i/i.test(
-    text.toLowerCase()
-  );
-}
-
-// ✅ Only allow internet for explicit real-time intent
+// ✅ Improved: Decide when internet is ACTUALLY needed
 function needsInternet(query) {
   const q = query.toLowerCase();
 
-  if (isBlockedFromInternet(q)) return false;
-
-  const realtimeTriggers = [
-    "today",
-    "latest",
-    "current",
-    "right now",
-    "news",
-    "price",
-    "weather",
-    "stock",
-    "election",
-    "score",
-    "live"
+  // Never search for casual or reasoning-only queries
+  const noInternetPatterns = [
+    /^hi$/,
+    /^hello$/,
+    /^hey$/,
+    /^how are you/,
+    /^who are you/,
+    /^what can you do/,
+    /^thank/,
+    /^why /,
+    /^how does /,
+    /^explain /,
+    /^what is /,
+    /^define /
   ];
 
-  return realtimeTriggers.some(word => q.includes(word));
+  if (noInternetPatterns.some(p => p.test(q.trim()))) {
+    return false;
+  }
+
+  // Explicit internet intent
+  const internetTriggers = [
+    "search",
+    "find",
+    "online",
+    "website",
+    "app",
+    "review",
+    "price",
+    "available",
+    "latest",
+    "download",
+    "ios",
+    "android",
+    "company",
+    "startup"
+  ];
+
+  return internetTriggers.some(word => q.includes(word));
 }
 
-// 🌐 Tavily search (strict, small)
+// 🌐 Tavily web search (top 3)
 async function webSearch(query) {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -75,7 +81,7 @@ async function webSearch(query) {
   return data.results || [];
 }
 
-// 💬 Main chat route
+// Main chat route
 router.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
@@ -84,14 +90,15 @@ router.post("/chat", async (req, res) => {
     let context = "";
     let usedInternet = false;
 
-    // 🌐 Internet ONLY if explicitly required
+    // 🌐 Use internet ONLY when clearly needed
     if (needsInternet(message)) {
       const results = await webSearch(message);
-      if (results.length) {
+
+      if (results.length > 0) {
         usedInternet = true;
-        context = results
-          .map((r, i) => `Source ${i + 1}: ${r.content}`)
-          .join("\n\n");
+        context = results.map((r, i) =>
+          `Source ${i + 1}: ${r.content}`
+        ).join("\n\n");
       }
     }
 
@@ -99,20 +106,24 @@ router.post("/chat", async (req, res) => {
       {
         role: "system",
         content: `
-You are EARG AI, created by the EARG AI project.
-You are NOT Meta AI, OpenAI, Google, or any other company.
+You are EARG AI, an assistant created by the EARG AI project.
 
-CRITICAL RULES:
-- Always attempt to answer using your own reasoning first.
-- Use live internet information ONLY if it is explicitly provided.
-- Never infer personal details about the user.
-- If a user shares their name, acknowledge politely and stop.
-- You have short-term memory ONLY for this session.
-- If recalling something, say "from this session".
+Identity rules:
+- You are NOT Meta AI, OpenAI, Google, or any other company.
+- If asked about your creator, say: "I was created by the EARG AI team."
 
-If no live data is provided, do NOT invent external facts.
-Respond clearly, safely, and confidently.
-        `.trim()
+Reasoning rules:
+- Think internally first.
+- Use the internet ONLY if live information is provided.
+- If live data is provided, summarize it confidently.
+- Do NOT apologize for limitations.
+- Do NOT explain how searching works.
+- Do NOT say "I might be wrong because I searched".
+
+Conversation:
+- Remember recent messages.
+- Respond clearly, directly, and naturally.
+`
       }
     ];
 
@@ -123,7 +134,6 @@ Respond clearly, safely, and confidently.
       });
     }
 
-    // 🧠 Inject session memory
     messages.push(...chatMemory);
 
     messages.push({
@@ -138,7 +148,6 @@ Respond clearly, safely, and confidently.
 
     const reply = completion.choices[0].message.content;
 
-    // 🧠 Save memory (session only)
     chatMemory.push({ role: "user", content: message });
     chatMemory.push({ role: "assistant", content: reply });
 
@@ -147,6 +156,7 @@ Respond clearly, safely, and confidently.
     }
 
     res.json({ reply, usedInternet });
+
   } catch (err) {
     console.error("Chat error:", err);
     res.status(500).json({ error: "AI failed" });
