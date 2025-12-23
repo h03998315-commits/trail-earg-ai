@@ -4,7 +4,7 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont;
+  font-family: system-ui, -apple-system;
   background: #0b1220;
   color: #e5e7eb;
   height: 100vh;
@@ -34,11 +34,9 @@ body {
 .chat-item {
   padding: 10px 14px;
   cursor: pointer;
-  border-bottom: 1px solid #020617;
 }
 
-.chat-item:hover,
-.chat-item.active {
+.chat-item:hover {
   background: #020617;
 }
 
@@ -51,14 +49,14 @@ body {
 
 #messages {
   flex: 1;
-  padding: 14px;
+  padding: 12px;
   overflow-y: auto;
 }
 
 .msg {
-  max-width: 75%;
-  margin-bottom: 12px;
+  max-width: 80%;
   padding: 10px 12px;
+  margin-bottom: 10px;
   border-radius: 10px;
   line-height: 1.4;
 }
@@ -77,20 +75,20 @@ body {
 /* Input */
 #inputBox {
   display: flex;
+  gap: 8px;
   padding: 10px;
   border-top: 1px solid #1e293b;
-  gap: 8px;
 }
 
 textarea {
   flex: 1;
   resize: none;
-  height: 42px;
+  height: 44px;
+  padding: 10px;
   background: #020617;
   color: white;
   border: 1px solid #334155;
   border-radius: 8px;
-  padding: 10px;
 }
 
 button {
@@ -100,5 +98,31 @@ button {
   padding: 0 16px;
   border-radius: 8px;
   font-weight: 600;
-  cursor: pointer;
+}
+
+/* MOBILE FIX */
+@media (max-width: 768px) {
+  body {
+    flex-direction: column;
   }
+
+  #sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  #chats {
+    display: none;
+  }
+
+  #main {
+    flex: 1;
+  }
+
+  #inputBox {
+    position: sticky;
+    bottom: 0;
+    background: #020617;
+  }
+}
