@@ -1,7 +1,16 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
+const fs = require("fs");
 
-const dbPath = path.join(__dirname, "../../db/database.sqlite");
+const dir = process.env.RENDER
+  ? "/opt/render/project/src/db"
+  : __dirname;
+
+if (!fs.existsSync(dir)) {
+  fs.mkdirSync(dir, { recursive: true });
+}
+
+const dbPath = path.join(dir, "database.sqlite");
 const db = new sqlite3.Database(dbPath);
 
 db.serialize(() => {
