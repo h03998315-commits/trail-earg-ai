@@ -8,7 +8,7 @@
   <style>
     :root {
       --bg: #020617;
-      --panel: rgba(15, 23, 42, 0.85);
+      --panel: rgba(15, 23, 42, 0.9);
       --border: #1e293b;
       --accent: #38bdf8;
       --user: #2563eb;
@@ -22,29 +22,44 @@
 
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont;
+      font-family: system-ui, -apple-system;
       background: radial-gradient(circle at top, #020617, #000);
       color: var(--text);
       height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow: hidden; /* 🔒 prevents body scrolling */
     }
 
+    /* HEADER */
     header {
-      padding: 14px;
-      text-align: center;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       font-weight: 600;
       letter-spacing: 0.5px;
+      background: rgba(2, 6, 23, 0.95);
       border-bottom: 1px solid var(--border);
-      background: linear-gradient(to right, #020617, #020617);
+      z-index: 10;
     }
 
     header span {
       color: var(--accent);
+      margin-right: 6px;
     }
 
+    /* CHAT AREA */
     #chat {
-      flex: 1;
+      position: absolute;
+      top: 56px;        /* header height */
+      bottom: 64px;     /* footer height */
+      left: 0;
+      right: 0;
       padding: 14px;
       overflow-y: auto;
       display: flex;
@@ -74,18 +89,25 @@
       box-shadow: inset 0 0 12px rgba(56, 189, 248, 0.05);
     }
 
+    /* FOOTER / INPUT */
     footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
       display: flex;
       gap: 8px;
       padding: 10px;
       border-top: 1px solid var(--border);
-      background: rgba(2, 6, 23, 0.95);
+      background: rgba(2, 6, 23, 0.98);
+      z-index: 10;
     }
 
     textarea {
       flex: 1;
       resize: none;
-      height: 46px;
+      height: 100%;
       padding: 12px;
       border-radius: 10px;
       border: 1px solid var(--border);
@@ -132,7 +154,7 @@
       100% { opacity: 0.3 }
     }
 
-    /* Mobile tweaks */
+    /* Mobile comfort */
     @media (max-width: 600px) {
       .msg {
         max-width: 92%;
