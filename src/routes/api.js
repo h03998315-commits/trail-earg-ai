@@ -1,12 +1,12 @@
 const router = require("express").Router();
 
-let groqClient;
+let groqClient = null;
 
-// ===== MEMORY =====
+// 🧠 In-memory chat history
 const chatMemory = [];
-const MAX_MEMORY = 10;
+const MAX_MEMORY = 8;
 
-// ===== LOAD GROQ =====
+// Load Groq safely (Node 22)
 async function getGroq() {
   if (!groqClient) {
     const { default: Groq } = await import("groq-sdk");
@@ -17,136 +17,120 @@ async function getGroq() {
   return groqClient;
 }
 
-// ===== WEB SEARCH =====
-async function webSearch(query) {
-  const res = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.TAVILY_API_KEY}`
-    },
-    body: JSON.stringify({
-      query,
-      max_results: 4,
-      search_depth: "basic"
-    })
-  });
-
-  const data = await res.json();
-  return data.results || [];
-}
-
-// ===== PASS 1: INTERNAL THINKING =====
-async function thinkOffline(groq, message, memory) {
-  const completion = await groq.chat.completions.create({
-    model: "llama-3.1-8b-instant",
-    temperature: 0.55,
-    messages: [
-      {
-        role: "system",
-        content: `
-You are EARG AI.
-
-INTERNAL THINKING MODE:
-- Think step-by-step silently.
-- Decide if your knowledge is sufficient.
-- If insufficient, explicitly say: "KNOWLEDGE_GAP".
-- Do NOT answer yet.
-`
-      },
-      ...memory,
-      { role: "user", content: message }
-    ]
-  });
-
-  return completion.choices[0].message.content;
-}
-
-// ===== PASS 2: FINAL ANSWER =====
-async function answer(groq, message, memory, context = "") {
-  const messages = [
-    {
-      role: "system",
-      content: `
-You are EARG AI.
-
-IDENTITY:
-- Created by the EARG AI team.
-- Not Meta AI, OpenAI, or Google.
-
-RESPONSE RULES:
-- Answer like a highly competent human expert.
-- Be concise but thorough.
-- Do NOT explain limitations.
-- Do NOT mention thinking or searching.
-- Never hallucinate facts.
-`
-    }
+// Casual messages → no internet
+function isCasual(query) {
+  const casualPatterns = [
+    /^hi$/i,
+    /^hello$/i,
+    /^hey$/i,
+    /^how are you/i,
+    /^who are you/i,
+    /^what can you do/i,
+    /^thanks/i,
+    /^thank you/i
   ];
-
-  if (context) {
-    messages.push({
-      role: "system",
-      content: `Live information (use only if helpful):\n${context}`
-    });
-  }
-
-  messages.push(...memory);
-  messages.push({ role: "user", content: message });
-
-  const completion = await groq.chat.completions.create({
-    model: "llama-3.1-8b-instant",
-    temperature: 0.6,
-    messages
-  });
-
-  return completion.choices[0].message.content;
+  return casualPatterns.some(p => p.test(query.trim()));
 }
 
-// ===== CHAT ROUTE =====
+// 🌐 Web search (Tavily)
+async function webSearch(query) {
+  try {
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.TAVILY_API_KEY}`
+      },
+      body: JSON.stringify({
+        query,
+        max_results: 3,
+        search_depth: "basic"
+      })
+    });
+
+    const data = await res.json();
+    return data.results || [];
+  } catch {
+    return [];
+  }
+}
+
+// Main chat route
 router.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
     const groq = await getGroq();
 
+    let context = "";
     let usedInternet = false;
 
-    // ===== THINK FIRST =====
-    const internalThought = await thinkOffline(groq, message, chatMemory);
-
-    let finalReply;
-
-    // ===== KNOWLEDGE GAP DETECTED =====
-    if (internalThought.includes("KNOWLEDGE_GAP")) {
+    // 🌐 Use internet for almost everything except casual talk
+    if (!isCasual(message)) {
       const results = await webSearch(message);
-
-      if (results.length > 0) {
+      if (results.length) {
         usedInternet = true;
-
-        const context = results
-          .map((r, i) => `Source ${i + 1}: ${r.content}`)
-          .join("\n\n");
-
-        finalReply = await answer(groq, message, chatMemory, context);
-      } else {
-        // No good web data → answer honestly
-        finalReply = await answer(groq, message, chatMemory);
+        context = results.map((r, i) => (
+          `Source ${i + 1}: ${r.content}`
+        )).join("\n\n");
       }
-    } else {
-      // Knowledge sufficient → answer directly
-      finalReply = await answer(groq, message, chatMemory);
     }
 
-    // ===== SAVE MEMORY =====
-    chatMemory.push({ role: "user", content: message });
-    chatMemory.push({ role: "assistant", content: finalReply });
+    // 🧠 System prompt (CRITICAL)
+    const messages = [
+      {
+        role: "system",
+        content: `
+You are EARG AI, created by the EARG AI team.
+You are NOT Meta AI, OpenAI, Google, or any other company.
 
-    while (chatMemory.length > MAX_MEMORY) chatMemory.shift();
+Rules:
+- Always think and reason first.
+- Use your own knowledge and logic as the primary source.
+- Internet information is supplemental only.
+- If internet data is present, blend it naturally into the answer.
+- Never mention searching, browsing, sources, or APIs.
+- Never claim access to private data or user profiles.
+- Do not guess personal details.
+- If unsure, say so honestly.
+- Answer like a confident, thoughtful assistant.
+`
+      }
+    ];
 
-    res.json({
-      reply: finalReply,
-      usedInternet
+    // 🌐 Inject web context silently
+    if (context) {
+      messages.push({
+        role: "system",
+        content: `Supplemental real-time information:\n${context}`
+      });
+    }
+
+    // 🧠 Memory
+    messages.push(...chatMemory);
+
+    // User message
+    messages.push({
+      role: "user",
+      content: message
     });
+
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages,
+      temperature: 0.6
+    });
+
+    const reply = completion.choices[0].message.content;
+
+    // Save memory
+    chatMemory.push({ role: "user", content: message });
+    chatMemory.push({ role: "assistant", content: reply });
+
+    while (chatMemory.length > MAX_MEMORY) {
+      chatMemory.shift();
+    }
+
+    res.json({ reply, usedInternet });
 
   } catch (err) {
     console.error("Chat error:", err);
@@ -154,7 +138,7 @@ router.post("/chat", async (req, res) => {
   }
 });
 
-// ===== STATUS =====
+// Health check
 router.get("/status", (_, res) => {
   res.json({ ok: true });
 });
