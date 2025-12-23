@@ -14,24 +14,12 @@ async function send() {
   input.value = "";
   add("user", text);
 
-  await fetch(`/api/chats/message/${currentChat}`, {
+  const res = await fetch(`/api/chats/send/${currentChat}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text })
   });
 
-  const ai = document.createElement("div");
-  ai.className = "msg ai";
-  document.getElementById("messages").appendChild(ai);
-
-  const evt = new EventSource(`/api/chats/stream/${currentChat}`);
-
-  evt.onmessage = e => {
-    if (e.data === "[DONE]") {
-      evt.close();
-    } else {
-      ai.textContent += e.data;
-      ai.scrollIntoView({ behavior: "smooth" });
-    }
-  };
-    }
+  const data = await res.json();
+  add("ai", data.reply);
+}
