@@ -58,15 +58,10 @@
     .boot-line:nth-child(4) { animation-delay: 2s; }
     .boot-line:nth-child(5) { animation-delay: 2.6s; }
 
-    @keyframes show {
-      to { opacity: 1; }
-    }
+    @keyframes show { to { opacity: 1; } }
 
     @keyframes fadeOut {
-      to {
-        opacity: 0;
-        pointer-events: none;
-      }
+      to { opacity: 0; pointer-events: none; }
     }
 
     /* ===== HEADER ===== */
@@ -152,6 +147,14 @@
       font-size: 14px;
       color: var(--muted);
       animation: pulse 1.2s infinite;
+    }
+
+    /* 🌐 LIVE DATA BADGE */
+    .live-badge {
+      font-size: 11px;
+      color: var(--accent);
+      margin-top: 6px;
+      opacity: 0.85;
     }
 
     /* ===== INPUT ===== */
@@ -244,8 +247,9 @@
     return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  function add(role, text) {
+  function add(role, text, usedInternet = false) {
     const wrap = document.createElement("div");
+
     const msg = document.createElement("div");
     msg.className = "bubble " + role;
     msg.textContent = text;
@@ -255,6 +259,14 @@
     t.textContent = time();
 
     wrap.appendChild(msg);
+
+    if (role === "ai" && usedInternet) {
+      const badge = document.createElement("div");
+      badge.className = "live-badge";
+      badge.textContent = "🌐 Live data used";
+      wrap.appendChild(badge);
+    }
+
     wrap.appendChild(t);
     chat.appendChild(wrap);
     chat.scrollTop = chat.scrollHeight;
@@ -273,15 +285,21 @@
     chat.appendChild(typing);
     chat.scrollTop = chat.scrollHeight;
 
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text })
-    });
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text })
+      });
 
-    const data = await res.json();
-    typing.remove();
-    add("ai", data.reply);
+      const data = await res.json();
+      typing.remove();
+      add("ai", data.reply, data.usedInternet === true);
+
+    } catch (err) {
+      typing.remove();
+      add("ai", "Something went wrong. Please try again.");
+    }
   }
 
   function clearChat() {
