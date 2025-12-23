@@ -19,18 +19,41 @@ async function getGroq() {
 
 // Decide when internet is needed
 function needsInternet(query) {
-  const casualPatterns = [
-    /^hi$/i,
-    /^hello$/i,
-    /^hey$/i,
-    /^how are you/i,
-    /^who are you/i,
-    /^what can you do/i,
-    /^thanks/i,
-    /^thank you/i
+  const q = query.toLowerCase();
+
+  // ❌ NEVER use internet for memory / self / chat
+  const internalOnly = [
+    "remember",
+    "did we",
+    "last talked",
+    "what did we talk",
+    "who are you",
+    "your creator",
+    "about me",
+    "how are you",
+    "what can you do"
   ];
 
-  return !casualPatterns.some(p => p.test(query.trim()));
+  if (internalOnly.some(k => q.includes(k))) {
+    return false;
+  }
+
+  // 🌐 Use internet ONLY for real-world facts
+  const internetKeywords = [
+    "latest",
+    "current",
+    "news",
+    "price",
+    "today",
+    "now",
+    "who is the current",
+    "weather",
+    "score",
+    "released",
+    "update"
+  ];
+
+  return internetKeywords.some(k => q.includes(k));
 }
 
 // Tavily web search (top 3)
