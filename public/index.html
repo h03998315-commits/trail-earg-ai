@@ -25,6 +25,7 @@ body{
   color:var(--text);
   height:100vh;
   overflow:hidden;
+  overscroll-behavior:contain;
 }
 
 /* ===== BOOT ===== */
@@ -68,16 +69,20 @@ header{
 
 /* ===== CHAT ===== */
 #chat{
-  position:absolute;
+  position:fixed;
   top:56px;
   bottom:72px;
-  left:0;right:0;
-  padding:16px;
+  left:0;
+  right:0;
+  padding:16px 16px 32px;
   overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
   display:flex;
   flex-direction:column;
   gap:16px;
 }
+
 .bubble{
   max-width:85%;
   padding:14px 16px;
@@ -102,6 +107,7 @@ footer{
   padding:12px;
   background:rgba(2,6,23,.98);
   border-top:1px solid var(--border);
+  z-index:10;
 }
 textarea{
   flex:1;
@@ -178,7 +184,10 @@ function add(role,text,usedInternet=false){
   }
   wrap.appendChild(t);
   chat.appendChild(wrap);
-  chat.scrollTop=chat.scrollHeight;
+
+  requestAnimationFrame(() => {
+    chat.scrollTop = chat.scrollHeight;
+  });
 }
 
 async function send(){
@@ -191,7 +200,10 @@ async function send(){
   thinking.className="typing";
   thinking.textContent="🧠 Thinking internally…";
   chat.appendChild(thinking);
-  chat.scrollTop=chat.scrollHeight;
+
+  requestAnimationFrame(() => {
+    chat.scrollTop = chat.scrollHeight;
+  });
 
   try{
     const res=await fetch("/api/chat",{
