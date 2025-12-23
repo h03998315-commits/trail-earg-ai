@@ -6,7 +6,7 @@ let groqClient = null;
 const chatMemory = [];
 const MAX_MEMORY = 8;
 
-// Load Groq safely (Node 22)
+// Load Groq safely
 async function getGroq() {
   if (!groqClient) {
     const { default: Groq } = await import("groq-sdk");
@@ -18,15 +18,13 @@ async function getGroq() {
 }
 
 /* =========================
-   🔢 MATH DETECTION + SOLVER
+   🔢 MATH ENGINE (STRICT)
    ========================= */
 
-// Detect pure math expressions
 function isMathQuery(text) {
   return /^[0-9+\-*/().%\s]+$/.test(text.trim());
 }
 
-// Safe math evaluation
 function solveMath(expression) {
   try {
     const cleaned = expression.replace(/%/g, "/100");
@@ -41,7 +39,17 @@ function solveMath(expression) {
 }
 
 /* =========================
-   🌐 INTERNET SEARCH (NON-MATH)
+   🧠 CASUAL CHAT DETECTION
+   ========================= */
+
+function isCasual(text) {
+  return /^(hi|hello|hey|how are you|how r u|thanks|thank you)$/i.test(
+    text.trim()
+  );
+}
+
+/* =========================
+   🌐 INTERNET SEARCH (SMART)
    ========================= */
 
 async function webSearch(query) {
@@ -73,43 +81,51 @@ router.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
 
-    /* ---------- 1️⃣ PURE MATH → NO AI, NO INTERNET ---------- */
+    /* ---------- 1️⃣ PURE MATH ---------- */
     if (isMathQuery(message)) {
       const answer = solveMath(message);
       if (answer !== null) {
         return res.json({
-          reply: `The correct result is **${answer}**.`,
+          reply: `${answer}`,
           usedInternet: false
         });
       }
     }
 
-    /* ---------- 2️⃣ NON-MATH → AI + OPTIONAL INTERNET ---------- */
     const groq = await getGroq();
+
     let context = "";
     let usedInternet = false;
 
-    const results = await webSearch(message);
-    if (results.length) {
-      usedInternet = true;
-      context = results.map((r, i) => `Source ${i + 1}: ${r.content}`).join("\n\n");
+    /* ---------- 2️⃣ INTERNET ONLY WHEN NEEDED ---------- */
+    if (!isCasual(message) && message.length > 15) {
+      const results = await webSearch(message);
+      if (results.length) {
+        usedInternet = true;
+        context = results
+          .map(r => r.content)
+          .slice(0, 2)
+          .join("\n");
+      }
     }
 
+    /* ---------- 3️⃣ NATURAL SYSTEM PROMPT ---------- */
     const messages = [
       {
         role: "system",
         content: `
-You are EARG AI, created by the EARG AI team.
-You are not Meta AI, OpenAI, Google, or any other company.
+You are EARG AI, an intelligent assistant created by the EARG AI team.
 
-Rules:
-- Think and reason before answering.
-- Use your own knowledge first.
-- Internet info is supplemental only.
-- Blend reasoning + live info naturally.
-- Never mention sources, APIs, or searches.
-- Never invent personal data.
-- Be calm, accurate, and confident.
+Behavior rules:
+- Be natural, conversational, and human-like.
+- Respond normally to greetings (no explanations).
+- Use reasoning and logic by default.
+- Use live information only if it truly improves accuracy.
+- Blend reasoning and real-time info seamlessly.
+- Never mention searches, sources, or APIs.
+- Never invent personal information.
+- If unsure, say so simply.
+- Sound confident, helpful, and friendly.
 `
       }
     ];
@@ -117,7 +133,7 @@ Rules:
     if (context) {
       messages.push({
         role: "system",
-        content: `Supplemental real-time information:\n${context}`
+        content: `Real-time information (use if helpful):\n${context}`
       });
     }
 
@@ -127,7 +143,7 @@ Rules:
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       messages,
-      temperature: 0.6
+      temperature: 0.7
     });
 
     const reply = completion.choices[0].message.content;
