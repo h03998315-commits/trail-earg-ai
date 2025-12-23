@@ -8,7 +8,7 @@ const streamResponse = require("../ai/streamEngine");
  */
 router.get("/list", (req, res) => {
   const email = req.cookies.earg_session;
-  if (!email) return res.status(401).json({ error: "Not logged in" });
+  if (!email) return res.status(401).json([]);
 
   db.all(
     `SELECT chats.* FROM chats
@@ -25,10 +25,10 @@ router.get("/list", (req, res) => {
  */
 router.post("/new", (req, res) => {
   const email = req.cookies.earg_session;
-  if (!email) return res.status(401).json({ error: "Not logged in" });
+  if (!email) return res.status(401).end();
 
   db.get("SELECT id FROM users WHERE email=?", [email], (_, user) => {
-    if (!user) return res.status(400).json({ error: "User not found" });
+    if (!user) return res.status(400).end();
 
     const chatId = uuid();
     db.run(
@@ -45,8 +45,7 @@ router.post("/new", (req, res) => {
 router.post("/message/:chatId", (req, res) => {
   const { chatId } = req.params;
   const { text } = req.body;
-
-  if (!text) return res.status(400).json({ error: "Empty message" });
+  if (!text) return res.status(400).end();
 
   db.run(
     "INSERT INTO messages VALUES (?, ?, ?, ?, ?)",
@@ -56,7 +55,7 @@ router.post("/message/:chatId", (req, res) => {
 });
 
 /**
- * Stream AI response
+ * Stream AI reply
  */
 router.get("/stream/:chatId", async (req, res) => {
   const { chatId } = req.params;
@@ -68,8 +67,15 @@ router.get("/stream/:chatId", async (req, res) => {
   db.all(
     "SELECT role, content FROM messages WHERE chat_id=? ORDER BY created_at ASC",
     [chatId],
-    async (_, messages) => {
-      await streamResponse(messages, res);
+    async (_, rows) => {
+      // 🔴 THIS WAS THE MISSING PIECE:
+      // Convert DB rows to Groq format
+      const messages = rows.map(m => ({
+        role: m.role === "ai" ? "assistant" : "user",
+        content: m.content
+      }));
+
+      await streamResponse(chatId, messages, res);
     }
   );
 });
