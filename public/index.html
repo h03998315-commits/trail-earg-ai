@@ -1,91 +1,156 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Earg AI v0.1</title>
+  <title>Earg AI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <style>
+    :root {
+      --bg: #020617;
+      --panel: rgba(15, 23, 42, 0.85);
+      --border: #1e293b;
+      --accent: #38bdf8;
+      --user: #2563eb;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
-      font-family: system-ui;
-      background: #0b1220;
-      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont;
+      background: radial-gradient(circle at top, #020617, #000);
+      color: var(--text);
+      height: 100vh;
       display: flex;
       flex-direction: column;
-      height: 100vh;
     }
 
     header {
       padding: 14px;
       text-align: center;
-      background: #020617;
-      border-bottom: 1px solid #1e293b;
       font-weight: 600;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(to right, #020617, #020617);
+    }
+
+    header span {
+      color: var(--accent);
     }
 
     #chat {
       flex: 1;
-      padding: 12px;
+      padding: 14px;
       overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
 
     .msg {
-      max-width: 80%;
-      margin-bottom: 10px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      line-height: 1.4;
+      max-width: 85%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      line-height: 1.5;
       white-space: pre-wrap;
+      animation: fadeIn 0.25s ease;
     }
 
     .user {
       margin-left: auto;
-      background: #2563eb;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
       color: white;
+      box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
     }
 
     .ai {
-      background: #020617;
-      border: 1px solid #1e293b;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: inset 0 0 12px rgba(56, 189, 248, 0.05);
     }
 
     footer {
       display: flex;
       gap: 8px;
       padding: 10px;
-      border-top: 1px solid #1e293b;
-      background: #020617;
+      border-top: 1px solid var(--border);
+      background: rgba(2, 6, 23, 0.95);
     }
 
     textarea {
       flex: 1;
       resize: none;
-      height: 44px;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #334155;
+      height: 46px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
       background: #020617;
-      color: white;
+      color: var(--text);
+      outline: none;
+      font-size: 15px;
+    }
+
+    textarea::placeholder {
+      color: var(--muted);
     }
 
     button {
-      padding: 0 16px;
-      border-radius: 8px;
+      border-radius: 10px;
       border: none;
-      background: #2563eb;
-      color: white;
+      padding: 0 16px;
       font-weight: 600;
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      color: #020617;
+      cursor: pointer;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
+    }
+
+    button:active {
+      transform: scale(0.96);
+    }
+
+    .typing {
+      font-size: 14px;
+      color: var(--muted);
+      padding-left: 6px;
+      animation: pulse 1.2s infinite;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.3 }
+      50% { opacity: 1 }
+      100% { opacity: 0.3 }
+    }
+
+    /* Mobile tweaks */
+    @media (max-width: 600px) {
+      .msg {
+        max-width: 92%;
+      }
     }
   </style>
 </head>
+
 <body>
 
-<header>🧠 Earg AI (v0.1)</header>
+<header>
+  <span>◉</span> EARG AI <span>JARVIS</span>
+</header>
 
 <div id="chat"></div>
 
 <footer>
-  <textarea id="input" placeholder="Type a message..."></textarea>
+  <textarea id="input" placeholder="Ask me anything..."></textarea>
   <button onclick="send()">Send</button>
 </footer>
 
@@ -99,6 +164,7 @@
     div.textContent = text;
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
+    return div;
   }
 
   async function send() {
@@ -108,6 +174,12 @@
     input.value = "";
     add("user", text);
 
+    const typing = document.createElement("div");
+    typing.className = "typing";
+    typing.textContent = "Earg AI is thinking…";
+    chat.appendChild(typing);
+    chat.scrollTop = chat.scrollHeight;
+
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -115,6 +187,7 @@
     });
 
     const data = await res.json();
+    typing.remove();
     add("ai", data.reply);
   }
 
