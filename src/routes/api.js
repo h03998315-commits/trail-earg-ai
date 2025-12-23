@@ -17,25 +17,6 @@ async function getGroq() {
   return groqClient;
 }
 
-// ===== UNCERTAINTY DETECTION =====
-function lacksConfidence(text) {
-  const signals = [
-    "i don't know",
-    "i am not sure",
-    "i'm not sure",
-    "i don’t have information",
-    "i do not have information",
-    "unclear",
-    "not enough information",
-    "cannot confirm",
-    "might be",
-    "possibly",
-    "hard to say"
-  ];
-  const lower = text.toLowerCase();
-  return signals.some(s => lower.includes(s));
-}
-
 // ===== WEB SEARCH =====
 async function webSearch(query) {
   const res = await fetch("https://api.tavily.com/search", {
@@ -55,48 +36,88 @@ async function webSearch(query) {
   return data.results || [];
 }
 
+// ===== PASS 1: INTERNAL THINKING =====
+async function thinkOffline(groq, message, memory) {
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.1-8b-instant",
+    temperature: 0.55,
+    messages: [
+      {
+        role: "system",
+        content: `
+You are EARG AI.
+
+INTERNAL THINKING MODE:
+- Think step-by-step silently.
+- Decide if your knowledge is sufficient.
+- If insufficient, explicitly say: "KNOWLEDGE_GAP".
+- Do NOT answer yet.
+`
+      },
+      ...memory,
+      { role: "user", content: message }
+    ]
+  });
+
+  return completion.choices[0].message.content;
+}
+
+// ===== PASS 2: FINAL ANSWER =====
+async function answer(groq, message, memory, context = "") {
+  const messages = [
+    {
+      role: "system",
+      content: `
+You are EARG AI.
+
+IDENTITY:
+- Created by the EARG AI team.
+- Not Meta AI, OpenAI, or Google.
+
+RESPONSE RULES:
+- Answer like a highly competent human expert.
+- Be concise but thorough.
+- Do NOT explain limitations.
+- Do NOT mention thinking or searching.
+- Never hallucinate facts.
+`
+    }
+  ];
+
+  if (context) {
+    messages.push({
+      role: "system",
+      content: `Live information (use only if helpful):\n${context}`
+    });
+  }
+
+  messages.push(...memory);
+  messages.push({ role: "user", content: message });
+
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.1-8b-instant",
+    temperature: 0.6,
+    messages
+  });
+
+  return completion.choices[0].message.content;
+}
+
 // ===== CHAT ROUTE =====
 router.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
     const groq = await getGroq();
 
-    // ===== PASS 1: THINK FROM TRAINING =====
-    const baseMessages = [
-      {
-        role: "system",
-        content: `
-You are EARG AI.
-
-IDENTITY:
-- Created by the EARG AI team.
-- Not Meta AI, OpenAI, Google, or any provider.
-- Never mention training data or model origin.
-
-BEHAVIOR:
-- Answer using your own reasoning first.
-- If unsure, clearly express uncertainty.
-- Do NOT invent facts.
-- Do NOT mention searching or browsing.
-- Think like an expert.
-`
-      },
-      ...chatMemory,
-      { role: "user", content: message }
-    ];
-
-    const firstCompletion = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
-      temperature: 0.6,
-      messages: baseMessages
-    });
-
-    let firstReply = firstCompletion.choices[0].message.content;
-    let finalReply = firstReply;
     let usedInternet = false;
 
-    // ===== PASS 2: GO ONLINE IF NEEDED =====
-    if (lacksConfidence(firstReply)) {
+    // ===== THINK FIRST =====
+    const internalThought = await thinkOffline(groq, message, chatMemory);
+
+    let finalReply;
+
+    // ===== KNOWLEDGE GAP DETECTED =====
+    if (internalThought.includes("KNOWLEDGE_GAP")) {
       const results = await webSearch(message);
 
       if (results.length > 0) {
@@ -106,43 +127,21 @@ BEHAVIOR:
           .map((r, i) => `Source ${i + 1}: ${r.content}`)
           .join("\n\n");
 
-        const secondMessages = [
-          {
-            role: "system",
-            content: `
-You are EARG AI.
-
-TASK:
-- Combine your own reasoning with the live information below.
-- Correct any uncertainty from earlier.
-- Produce ONE confident, clear answer.
-- Do NOT mention sources or searching.
-`
-          },
-          {
-            role: "system",
-            content: `Live information:\n${context}`
-          },
-          { role: "user", content: message }
-        ];
-
-        const secondCompletion = await groq.chat.completions.create({
-          model: "llama-3.1-8b-instant",
-          temperature: 0.6,
-          messages: secondMessages
-        });
-
-        finalReply = secondCompletion.choices[0].message.content;
+        finalReply = await answer(groq, message, chatMemory, context);
+      } else {
+        // No good web data → answer honestly
+        finalReply = await answer(groq, message, chatMemory);
       }
+    } else {
+      // Knowledge sufficient → answer directly
+      finalReply = await answer(groq, message, chatMemory);
     }
 
     // ===== SAVE MEMORY =====
     chatMemory.push({ role: "user", content: message });
     chatMemory.push({ role: "assistant", content: finalReply });
 
-    while (chatMemory.length > MAX_MEMORY) {
-      chatMemory.shift();
-    }
+    while (chatMemory.length > MAX_MEMORY) chatMemory.shift();
 
     res.json({
       reply: finalReply,
