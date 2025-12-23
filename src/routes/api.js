@@ -2,8 +2,8 @@ const router = require("express").Router();
 
 let groqClient = null;
 
-// 🧠 Per-session memory store
-const sessionMemory = {};
+// 🧠 In-memory session memory (server instance)
+const chatMemory = [];
 const MAX_MEMORY = 6;
 
 // Load Groq safely (Node 22 compatible)
@@ -17,46 +17,23 @@ async function getGroq() {
   return groqClient;
 }
 
-// Decide when internet is needed
+// Decide when internet is actually needed
 function needsInternet(query) {
-  const q = query.toLowerCase();
-
-  // ❌ NEVER use internet for memory / self / chat
-  const internalOnly = [
-    "remember",
-    "did we",
-    "last talked",
-    "what did we talk",
-    "who are you",
-    "your creator",
-    "about me",
-    "how are you",
-    "what can you do"
+  const casualPatterns = [
+    /^hi$/i,
+    /^hello$/i,
+    /^hey$/i,
+    /^how are you/i,
+    /^who are you/i,
+    /^what can you do/i,
+    /^thanks/i,
+    /^thank you/i,
+    /^what did we last talk about/i
   ];
-
-  if (internalOnly.some(k => q.includes(k))) {
-    return false;
-  }
-
-  // 🌐 Use internet ONLY for real-world facts
-  const internetKeywords = [
-    "latest",
-    "current",
-    "news",
-    "price",
-    "today",
-    "now",
-    "who is the current",
-    "weather",
-    "score",
-    "released",
-    "update"
-  ];
-
-  return internetKeywords.some(k => q.includes(k));
+  return !casualPatterns.some(p => p.test(query.trim()));
 }
 
-// Tavily web search (top 3)
+// 🌐 Tavily search (top 3 only)
 async function webSearch(query) {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -75,52 +52,38 @@ async function webSearch(query) {
   return data.results || [];
 }
 
-// Main chat route
+// 💬 Main chat route
 router.post("/chat", async (req, res) => {
   try {
-    const { message, sessionId } = req.body;
-
-    if (!sessionId) {
-      return res.status(400).json({ error: "Missing sessionId" });
-    }
-
-    // Init session memory if needed
-    if (!sessionMemory[sessionId]) {
-      sessionMemory[sessionId] = [];
-    }
-
-    const memory = sessionMemory[sessionId];
+    const { message } = req.body;
     const groq = await getGroq();
 
     let context = "";
     let usedInternet = false;
 
-    // 🌐 Internet only when needed
     if (needsInternet(message)) {
       const results = await webSearch(message);
       if (results.length) {
         usedInternet = true;
-        context = results.map((r, i) => (
+        context = results.map((r, i) =>
           `Source ${i + 1}: ${r.content}`
-        )).join("\n\n");
+        ).join("\n\n");
       }
     }
 
-    // 🧠 Build messages
     const messages = [
       {
         role: "system",
         content: `
-You are EARG AI, an assistant created and deployed by the EARG AI project.
-You are not Meta AI, OpenAI, Google, or any other company.
-If asked about your creator, you say you were created by the EARG AI team.
-Do NOT claim to be created by Meta, OpenAI, or any model provider.
-Never mention training data, internal models, or organizations behind the base model.
-You remember recent parts of the conversation.
-Think before answering.
-Use live internet data ONLY if provided.
-Respond naturally, confidently, and clearly.
-`
+You are EARG AI, an assistant created by the EARG AI project.
+You are NOT Meta AI, OpenAI, Google, or any other company.
+If asked about your creator, say: "I was created by the EARG AI team."
+You have short-term memory only for this conversation session.
+If you remember something, say "from this session".
+Think internally before answering.
+If live data is provided, you may use it. Otherwise rely on reasoning.
+Respond clearly, naturally, and confidently.
+        `.trim()
       }
     ];
 
@@ -131,10 +94,8 @@ Respond naturally, confidently, and clearly.
       });
     }
 
-    // 🧠 Inject per-session memory
-    messages.push(...memory);
+    messages.push(...chatMemory);
 
-    // Current user message
     messages.push({
       role: "user",
       content: message
@@ -147,27 +108,19 @@ Respond naturally, confidently, and clearly.
 
     const reply = completion.choices[0].message.content;
 
-    // 🧠 Save to session memory
-    memory.push({ role: "user", content: message });
-    memory.push({ role: "assistant", content: reply });
+    // 🧠 Save session memory
+    chatMemory.push({ role: "user", content: message });
+    chatMemory.push({ role: "assistant", content: reply });
 
-    // Trim memory
-    while (memory.length > MAX_MEMORY) {
-      memory.shift();
-    }
+    while (chatMemory.length > MAX_MEMORY) chatMemory.shift();
 
-    res.json({
-      reply,
-      usedInternet
-    });
-
+    res.json({ reply, usedInternet });
   } catch (err) {
     console.error("Chat error:", err);
     res.status(500).json({ error: "AI failed" });
   }
 });
 
-// Health check
 router.get("/status", (_, res) => {
   res.json({ ok: true });
 });
