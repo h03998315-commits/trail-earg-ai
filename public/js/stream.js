@@ -14,19 +14,16 @@ async function send() {
   input.value = "";
   add("user", text);
 
-  // Save user message FIRST
   await fetch(`/api/chats/message/${currentChat}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text })
   });
 
-  // Create AI message bubble
   const ai = document.createElement("div");
   ai.className = "msg ai";
   document.getElementById("messages").appendChild(ai);
 
-  // Start streaming response
   const evt = new EventSource(`/api/chats/stream/${currentChat}`);
 
   evt.onmessage = e => {
@@ -37,4 +34,4 @@ async function send() {
       ai.scrollIntoView({ behavior: "smooth" });
     }
   };
-}
+    }
