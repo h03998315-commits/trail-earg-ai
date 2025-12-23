@@ -1,14 +1,14 @@
 const router = require("express").Router();
 const { v4: uuid } = require("uuid");
 const db = require("../db/init");
-const streamResponse = require("../ai/streamEngine");
+const generateResponse = require("../ai/streamEngine");
 
 /**
  * List chats
  */
 router.get("/list", (req, res) => {
   const email = req.cookies.earg_session;
-  if (!email) return res.status(401).json([]);
+  if (!email) return res.json([]);
 
   db.all(
     `SELECT chats.* FROM chats
@@ -21,15 +21,13 @@ router.get("/list", (req, res) => {
 });
 
 /**
- * Create new chat
+ * New chat
  */
 router.post("/new", (req, res) => {
   const email = req.cookies.earg_session;
   if (!email) return res.status(401).end();
 
   db.get("SELECT id FROM users WHERE email=?", [email], (_, user) => {
-    if (!user) return res.status(400).end();
-
     const chatId = uuid();
     db.run(
       "INSERT INTO chats VALUES (?, ?, ?, ?)",
@@ -40,34 +38,20 @@ router.post("/new", (req, res) => {
 });
 
 /**
- * Save user message
+ * Send message (NON STREAMING)
  */
-router.post("/message/:chatId", (req, res) => {
+router.post("/send/:chatId", async (req, res) => {
   const { chatId } = req.params;
   const { text } = req.body;
-  if (!text) return res.status(400).end();
 
+  // save user message
   db.run(
     "INSERT INTO messages VALUES (?, ?, ?, ?, ?)",
-    [uuid(), chatId, "user", text, new Date().toISOString()],
-    () => res.json({ ok: true })
+    [uuid(), chatId, "user", text, new Date().toISOString()]
   );
-});
-
-/**
- * Stream AI reply
- */
-router.get("/stream/:chatId", async (req, res) => {
-  const { chatId } = req.params;
-
-  console.log("🚀 STREAM STARTED FOR CHAT:", chatId);
-
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
 
   db.all(
-    "SELECT role, content FROM messages WHERE chat_id=? ORDER BY created_at ASC",
+    "SELECT role, content FROM messages WHERE chat_id=? ORDER BY created_at",
     [chatId],
     async (_, rows) => {
       const messages = rows.map(m => ({
@@ -75,7 +59,14 @@ router.get("/stream/:chatId", async (req, res) => {
         content: m.content
       }));
 
-      await streamResponse(chatId, messages, res);
+      const reply = await generateResponse(messages);
+
+      db.run(
+        "INSERT INTO messages VALUES (?, ?, ?, ?, ?)",
+        [uuid(), chatId, "ai", reply, new Date().toISOString()]
+      );
+
+      res.json({ reply });
     }
   );
 });
