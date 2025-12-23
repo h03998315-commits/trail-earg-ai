@@ -18,14 +18,18 @@
 
 *{box-sizing:border-box}
 
-body{
+html,body{
   margin:0;
+  height:100%;
+}
+
+body{
   font-family:system-ui,-apple-system;
   background:radial-gradient(circle at top,#020617,#000);
   color:var(--text);
-  height:100vh;
+  display:flex;
+  flex-direction:column;
   overflow:hidden;
-  overscroll-behavior:contain;
 }
 
 /* ===== BOOT ===== */
@@ -52,8 +56,6 @@ body{
 
 /* ===== HEADER ===== */
 header{
-  position:fixed;
-  top:0;left:0;right:0;
   height:56px;
   display:flex;
   align-items:center;
@@ -61,7 +63,7 @@ header{
   padding:0 14px;
   background:rgba(2,6,23,.95);
   border-bottom:1px solid var(--border);
-  z-index:10;
+  flex-shrink:0;
 }
 .title{display:flex;align-items:center;gap:8px;font-weight:600}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
@@ -69,20 +71,14 @@ header{
 
 /* ===== CHAT ===== */
 #chat{
-  position:fixed;
-  top:56px;
-  bottom:72px;
-  left:0;
-  right:0;
-  padding:16px 16px 32px;
+  flex:1;
+  padding:16px;
   overflow-y:auto;
-  -webkit-overflow-scrolling:touch;
-  overscroll-behavior:contain;
   display:flex;
   flex-direction:column;
   gap:16px;
+  overscroll-behavior:contain;
 }
-
 .bubble{
   max-width:85%;
   padding:14px 16px;
@@ -99,15 +95,13 @@ header{
 
 /* ===== INPUT ===== */
 footer{
-  position:fixed;
-  bottom:0;left:0;right:0;
   height:72px;
   display:flex;
   gap:10px;
   padding:12px;
   background:rgba(2,6,23,.98);
   border-top:1px solid var(--border);
-  z-index:10;
+  flex-shrink:0;
 }
 textarea{
   flex:1;
@@ -176,18 +170,17 @@ function add(role,text,usedInternet=false){
   t.textContent=time();
 
   wrap.appendChild(msg);
+
   if(role==="ai" && usedInternet){
     const b=document.createElement("div");
     b.className="live-badge";
     b.textContent="🌐 Live data used";
     wrap.appendChild(b);
   }
+
   wrap.appendChild(t);
   chat.appendChild(wrap);
-
-  requestAnimationFrame(() => {
-    chat.scrollTop = chat.scrollHeight;
-  });
+  chat.scrollTop=chat.scrollHeight;
 }
 
 async function send(){
@@ -200,10 +193,7 @@ async function send(){
   thinking.className="typing";
   thinking.textContent="🧠 Thinking internally…";
   chat.appendChild(thinking);
-
-  requestAnimationFrame(() => {
-    chat.scrollTop = chat.scrollHeight;
-  });
+  chat.scrollTop=chat.scrollHeight;
 
   try{
     const res=await fetch("/api/chat",{
@@ -224,7 +214,8 @@ function clearChat(){chat.innerHTML=""}
 
 input.addEventListener("keydown",e=>{
   if(e.key==="Enter"&&!e.shiftKey){
-    e.preventDefault();send();
+    e.preventDefault();
+    send();
   }
 });
 </script>
