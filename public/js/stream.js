@@ -1,11 +1,12 @@
 function add(role, text) {
-  const m = document.createElement("div");
-  m.className = "msg " + role;
-  m.textContent = text;
-  document.getElementById("messages").appendChild(m);
+  const msg = document.createElement("div");
+  msg.className = "msg " + role;
+  msg.textContent = text;
+  document.getElementById("messages").appendChild(msg);
+  msg.scrollIntoView({ behavior: "smooth" });
 }
 
-function send() {
+async function send() {
   const input = document.getElementById("input");
   const text = input.value.trim();
   if (!text || !currentChat) return;
@@ -13,14 +14,27 @@ function send() {
   input.value = "";
   add("user", text);
 
+  // Save user message FIRST
+  await fetch(`/api/chats/message/${currentChat}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+
+  // Create AI message bubble
   const ai = document.createElement("div");
   ai.className = "msg ai";
   document.getElementById("messages").appendChild(ai);
 
+  // Start streaming response
   const evt = new EventSource(`/api/chats/stream/${currentChat}`);
 
   evt.onmessage = e => {
-    if (e.data === "[DONE]") evt.close();
-    else ai.textContent += e.data;
+    if (e.data === "[DONE]") {
+      evt.close();
+    } else {
+      ai.textContent += e.data;
+      ai.scrollIntoView({ behavior: "smooth" });
+    }
   };
 }
