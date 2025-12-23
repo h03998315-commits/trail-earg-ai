@@ -118,8 +118,10 @@ Respond naturally, confidently, and clearly.
       chatMemory.shift();
     }
 
-    res.json({ reply });
-
+    res.json({
+  reply,
+  usedInternet: Boolean(context)
+});
   } catch (err) {
     console.error("Chat error:", err);
     res.status(500).json({ error: "AI failed" });
