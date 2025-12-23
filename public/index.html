@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Earg AI</title>
+  <title>EARG AI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <style>
@@ -16,9 +16,7 @@
       --muted: #94a3b8;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -26,12 +24,9 @@
       background: radial-gradient(circle at top, #020617, #000);
       color: var(--text);
       height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden; /* 🔒 prevents body scrolling */
+      overflow: hidden;
     }
 
-    /* HEADER */
     header {
       position: fixed;
       top: 0;
@@ -41,124 +36,112 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      background: rgba(2, 6, 23, 0.95);
+      gap: 8px;
+      background: rgba(2,6,23,.95);
       border-bottom: 1px solid var(--border);
       z-index: 10;
+      font-weight: 600;
+      letter-spacing: .5px;
     }
 
-    header span {
-      color: var(--accent);
-      margin-right: 6px;
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--accent);
     }
 
-    /* CHAT AREA */
     #chat {
       position: absolute;
-      top: 56px;        /* header height */
-      bottom: 64px;     /* footer height */
+      top: 56px;
+      bottom: 72px;
       left: 0;
       right: 0;
-      padding: 14px;
+      padding: 16px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 14px;
     }
 
-    .msg {
+    .bubble {
       max-width: 85%;
-      padding: 12px 14px;
-      border-radius: 14px;
-      line-height: 1.5;
+      padding: 14px 16px;
+      border-radius: 16px;
+      line-height: 1.55;
+      animation: slideIn .25s ease;
       white-space: pre-wrap;
-      animation: fadeIn 0.25s ease;
+      word-wrap: break-word;
     }
 
     .user {
       margin-left: auto;
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      background: linear-gradient(135deg,#2563eb,#1d4ed8);
       color: white;
-      box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
     }
 
     .ai {
       background: var(--panel);
       border: 1px solid var(--border);
-      box-shadow: inset 0 0 12px rgba(56, 189, 248, 0.05);
-    }
-
-    /* FOOTER / INPUT */
-    footer {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 64px;
-      display: flex;
-      gap: 8px;
-      padding: 10px;
-      border-top: 1px solid var(--border);
-      background: rgba(2, 6, 23, 0.98);
-      z-index: 10;
-    }
-
-    textarea {
-      flex: 1;
-      resize: none;
-      height: 100%;
-      padding: 12px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      background: #020617;
-      color: var(--text);
-      outline: none;
-      font-size: 15px;
-    }
-
-    textarea::placeholder {
-      color: var(--muted);
-    }
-
-    button {
-      border-radius: 10px;
-      border: none;
-      padding: 0 16px;
-      font-weight: 600;
-      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
-      color: #020617;
-      cursor: pointer;
-      box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
-    }
-
-    button:active {
-      transform: scale(0.96);
     }
 
     .typing {
       font-size: 14px;
       color: var(--muted);
       padding-left: 6px;
-      animation: pulse 1.2s infinite;
+      animation: pulse 1.3s infinite;
     }
 
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: none; }
+    footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 72px;
+      display: flex;
+      gap: 10px;
+      padding: 12px;
+      background: rgba(2,6,23,.98);
+      border-top: 1px solid var(--border);
+      z-index: 10;
+    }
+
+    textarea {
+      flex: 1;
+      resize: none;
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #020617;
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+    }
+
+    button {
+      padding: 0 18px;
+      border-radius: 14px;
+      border: none;
+      font-weight: 600;
+      background: linear-gradient(135deg,#38bdf8,#0ea5e9);
+      color: #020617;
+      box-shadow: 0 0 14px rgba(56,189,248,.5);
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; }
     }
 
     @keyframes pulse {
-      0% { opacity: 0.3 }
+      0% { opacity: .4 }
       50% { opacity: 1 }
-      100% { opacity: 0.3 }
+      100% { opacity: .4 }
     }
 
-    /* Mobile comfort */
     @media (max-width: 600px) {
-      .msg {
-        max-width: 92%;
-      }
+      .bubble { max-width: 92%; }
     }
   </style>
 </head>
@@ -166,13 +149,14 @@
 <body>
 
 <header>
-  <span>◉</span><span> EARG AI </span>
+  <div class="dot"></div>
+  EARG AI — JARVIS
 </header>
 
 <div id="chat"></div>
 
 <footer>
-  <textarea id="input" placeholder="Ask me anything..."></textarea>
+  <textarea id="input" placeholder="Ask anything…"></textarea>
   <button onclick="send()">Send</button>
 </footer>
 
@@ -182,11 +166,10 @@
 
   function add(role, text) {
     const div = document.createElement("div");
-    div.className = "msg " + role;
+    div.className = "bubble " + role;
     div.textContent = text;
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
-    return div;
   }
 
   async function send() {
