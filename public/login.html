@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Login · Earg AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    body {
+      background: #0b1220;
+      color: #e5e7eb;
+      font-family: system-ui;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .box {
+      width: 100%;
+      max-width: 360px;
+      background: #020617;
+      padding: 24px;
+      border-radius: 10px;
+      border: 1px solid #1e293b;
+    }
+    h2 { text-align: center; }
+    input {
+      width: 100%;
+      padding: 12px;
+      margin-top: 12px;
+      background: #020617;
+      color: white;
+      border: 1px solid #334155;
+      border-radius: 6px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 16px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+<div class="box">
+  <h2>🧠 Earg AI</h2>
+  <p style="opacity:.7;text-align:center">Continue to chat</p>
+
+  <input id="name" placeholder="Your name" />
+  <button onclick="login()">Continue</button>
+</div>
+
+<script>
+  function login() {
+    const name = document.getElementById("name").value.trim();
+    if (!name) return alert("Enter a name");
+
+    const user = {
+      id: crypto.randomUUID(),
+      name
+    };
+
+    localStorage.setItem("earg_user", JSON.stringify(user));
+    window.location.href = "/";
+  }
+</script>
+
+</body>
+</html>
