@@ -1,32 +1,12 @@
 const groq = require("./groq");
-const db = require("../db/init");
-const { v4: uuid } = require("uuid");
 
-async function streamResponse(chatId, messages, res) {
-  let aiText = "";
-
+async function generateResponse(messages) {
   const completion = await groq.chat.completions.create({
     model: "llama-3.1-8b-instant",
-    messages,
-    stream: true
+    messages
   });
 
-  for await (const chunk of completion) {
-    const token = chunk.choices?.[0]?.delta?.content;
-    if (token) {
-      aiText += token;
-      res.write(`data:${token}\n\n`);
-    }
-  }
-
-  // Save AI message AFTER stream completes
-  db.run(
-    "INSERT INTO messages VALUES (?, ?, ?, ?, ?)",
-    [uuid(), chatId, "ai", aiText, new Date().toISOString()]
-  );
-
-  res.write("data:[DONE]\n\n");
-  res.end();
+  return completion.choices[0].message.content;
 }
 
-module.exports = streamResponse;
+module.exports = generateResponse;
