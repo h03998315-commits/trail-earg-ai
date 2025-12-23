@@ -2,7 +2,7 @@ const router = require("express").Router();
 
 let groqClient = null;
 
-// Load Groq safely (Node 22 compatible)
+// ✅ Load Groq safely (Node 22 compatible, ESM-safe)
 async function getGroq() {
   if (!groqClient) {
     const { default: Groq } = await import("groq-sdk");
@@ -13,7 +13,27 @@ async function getGroq() {
   return groqClient;
 }
 
-// Tavily web search
+// ✅ Decide when internet is actually needed
+function needsInternet(query) {
+  const casualPatterns = [
+    /^hi$/i,
+    /^hello$/i,
+    /^hey$/i,
+    /^how are you/i,
+    /^who are you/i,
+    /^what can you do/i,
+    /^thanks/i,
+    /^thank you/i
+  ];
+
+  if (casualPatterns.some(p => p.test(query.trim()))) {
+    return false;
+  }
+
+  return true;
+}
+
+// ✅ Tavily web search (top 3 results only)
 async function webSearch(query) {
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
@@ -32,20 +52,22 @@ async function webSearch(query) {
   return data.results || [];
 }
 
+// ✅ Main chat route
 router.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
     const groq = await getGroq();
 
-    // 1️⃣ Always search the internet (B2)
-    const results = await webSearch(message);
+    let context = "";
 
-    // 2️⃣ Build clean context from top 3 results
-    const context = results.map((r, i) => (
-      `Source ${i + 1} (${r.url}): ${r.content}`
-    )).join("\n\n");
+    // 🌐 Only search when needed (HYBRID MODE)
+    if (needsInternet(message)) {
+      const results = await webSearch(message);
+      context = results.map((r, i) => (
+        `Source ${i + 1}: ${r.content}`
+      )).join("\n\n");
+    }
 
-    // 3️⃣ Send to AI
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       messages: [
@@ -53,15 +75,18 @@ router.post("/chat", async (req, res) => {
           role: "system",
           content: `
 You are EARG AI, a confident Jarvis-like assistant.
-You are provided with live internet information.
-Use it to answer accurately and clearly.
-Do NOT mention model limitations or training cutoffs.
+Think first like a conversational AI.
+Use live internet information ONLY if provided below.
+Do NOT mention training data, knowledge cutoffs, or model limitations.
+Respond naturally and intelligently.
 `
         },
-        {
-          role: "system",
-          content: `Live internet data:\n${context}`
-        },
+        ...(context
+          ? [{
+              role: "system",
+              content: `Live internet information:\n${context}`
+            }]
+          : []),
         {
           role: "user",
           content: message
@@ -79,6 +104,7 @@ Do NOT mention model limitations or training cutoffs.
   }
 });
 
+// ✅ Health check
 router.get("/status", (_, res) => {
   res.json({ ok: true });
 });
