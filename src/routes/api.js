@@ -2,8 +2,8 @@ const router = require("express").Router();
 
 let groqClient = null;
 
-// 🧠 In-memory chat history (per server instance)
-const chatMemory = [];
+// 🧠 Per-session memory store
+const sessionMemory = {};
 const MAX_MEMORY = 6;
 
 // Load Groq safely (Node 22 compatible)
@@ -55,20 +55,35 @@ async function webSearch(query) {
 // Main chat route
 router.post("/chat", async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "Missing sessionId" });
+    }
+
+    // Init session memory if needed
+    if (!sessionMemory[sessionId]) {
+      sessionMemory[sessionId] = [];
+    }
+
+    const memory = sessionMemory[sessionId];
     const groq = await getGroq();
 
     let context = "";
+    let usedInternet = false;
 
     // 🌐 Internet only when needed
     if (needsInternet(message)) {
       const results = await webSearch(message);
-      context = results.map((r, i) => (
-        `Source ${i + 1}: ${r.content}`
-      )).join("\n\n");
+      if (results.length) {
+        usedInternet = true;
+        context = results.map((r, i) => (
+          `Source ${i + 1}: ${r.content}`
+        )).join("\n\n");
+      }
     }
 
-    // 🧠 Build message list with memory
+    // 🧠 Build messages
     const messages = [
       {
         role: "system",
@@ -93,8 +108,8 @@ Respond naturally, confidently, and clearly.
       });
     }
 
-    // 🧠 Inject recent memory
-    messages.push(...chatMemory);
+    // 🧠 Inject per-session memory
+    messages.push(...memory);
 
     // Current user message
     messages.push({
@@ -109,19 +124,20 @@ Respond naturally, confidently, and clearly.
 
     const reply = completion.choices[0].message.content;
 
-    // 🧠 Save to memory
-    chatMemory.push({ role: "user", content: message });
-    chatMemory.push({ role: "assistant", content: reply });
+    // 🧠 Save to session memory
+    memory.push({ role: "user", content: message });
+    memory.push({ role: "assistant", content: reply });
 
     // Trim memory
-    while (chatMemory.length > MAX_MEMORY) {
-      chatMemory.shift();
+    while (memory.length > MAX_MEMORY) {
+      memory.shift();
     }
 
     res.json({
-  reply,
-  usedInternet: Boolean(context)
-});
+      reply,
+      usedInternet
+    });
+
   } catch (err) {
     console.error("Chat error:", err);
     res.status(500).json({ error: "AI failed" });
