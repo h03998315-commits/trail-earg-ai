@@ -32,6 +32,16 @@ function isCasual(query) {
   return casualPatterns.some(p => p.test(query.trim()));
 }
 
+// 🧮 Pure arithmetic detector
+function isPureMath(input) {
+  return /^[\d\s+\-*/().]+$/.test(input.trim());
+}
+
+// 🌐 Decide if internet is REALLY needed
+function needsInternet(query) {
+  return /\b(current|latest|today|now|news|price|update|live|recent|who is the current)\b/i.test(query);
+}
+
 // 🌐 Web search (Tavily)
 async function webSearch(query) {
   try {
@@ -59,23 +69,46 @@ async function webSearch(query) {
 router.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
+
+    /* =========================
+       🧮 ARITHMETIC SHORT-CIRCUIT
+       ========================= */
+    if (isPureMath(message)) {
+      try {
+        const result = Function(`"use strict"; return (${message})`)();
+        return res.json({
+          reply: String(result),
+          usedInternet: false
+        });
+      } catch {
+        return res.json({
+          reply: "I couldn’t compute that expression. Please check the format.",
+          usedInternet: false
+        });
+      }
+    }
+
     const groq = await getGroq();
 
     let context = "";
     let usedInternet = false;
 
-    // 🌐 Use internet for almost everything except casual talk
-    if (!isCasual(message)) {
+    /* =========================
+       🌐 INTERNET (ONLY IF NEEDED)
+       ========================= */
+    if (!isCasual(message) && needsInternet(message)) {
       const results = await webSearch(message);
       if (results.length) {
         usedInternet = true;
-        context = results.map((r, i) => (
-          `Source ${i + 1}: ${r.content}`
-        )).join("\n\n");
+        context = results
+          .map((r, i) => `Source ${i + 1}: ${r.content}`)
+          .join("\n\n");
       }
     }
 
-    // 🧠 System prompt (CRITICAL)
+    /* =========================
+       🧠 SYSTEM PROMPT
+       ========================= */
     const messages = [
       {
         role: "system",
@@ -84,20 +117,18 @@ You are EARG AI, created by the EARG AI team.
 You are NOT Meta AI, OpenAI, Google, or any other company.
 
 Rules:
-- Always think and reason first.
-- Use your own knowledge and logic as the primary source.
-- Internet information is supplemental only.
-- If internet data is present, blend it naturally into the answer.
-- Never mention searching, browsing, sources, or APIs.
-- Never claim access to private data or user profiles.
-- Do not guess personal details.
-- If unsure, say so honestly.
-- Answer like a confident, thoughtful assistant.
+- Think internally before answering.
+- Use your own reasoning and knowledge FIRST.
+- Internet data is secondary and optional.
+- If internet info exists, blend it naturally.
+- Never mention searching, APIs, or sources.
+- Never invent personal details.
+- If uncertain, say so honestly.
+- Be accurate, calm, and confident.
 `
       }
     ];
 
-    // 🌐 Inject web context silently
     if (context) {
       messages.push({
         role: "system",
